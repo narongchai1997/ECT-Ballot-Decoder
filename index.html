@@ -3,7 +3,24 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ECT Ballot QR Decoder</title>
+    
+    <!-- SEO Meta Tags -->
+    <title>ECT Ballot QR Decoder - เครื่องมือตรวจสอบและถอดรหัสบัตรเลือกตั้ง</title>
+    <meta name="description" content="เครื่องมือตรวจสอบและถอดรหัส QR Code บนบัตรเลือกตั้ง (ECT Ballot Decoder) ช่วยตรวจสอบความสัมพันธ์ของเลขที่บัตร (Ballot ID) และเล่มที่ (Book ID) สำหรับบัตรเลือกตั้งแบบแบ่งเขตและบัญชีรายชื่อ">
+    <meta name="keywords" content="ตรวจสอบบัตรเลือกตั้ง, ถอดรหัส QR Code, ECT Ballot Decoder, เลือกตั้ง, กกต, บัตรเขียว, บัตรชมพู, ตรวจสอบสิทธิเลือกตั้ง, LCG Algorithm, Election Verify">
+    <meta name="author" content="ECT Ballot Decoder">
+    <meta name="robots" content="index, follow">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="ECT Ballot QR Decoder - เครื่องมือตรวจสอบบัตรเลือกตั้ง">
+    <meta property="og:description" content="เครื่องมือจำลองการถอดรหัสและตรวจสอบความถูกต้องของ QR Code บนบัตรเลือกตั้ง ค้นหาความสัมพันธ์ระหว่างเล่มที่และเลขที่บัตร">
+    
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:title" content="ECT Ballot QR Decoder - เครื่องมือตรวจสอบบัตรเลือกตั้ง">
+    <meta property="twitter:description" content="เครื่องมือจำลองการถอดรหัสและตรวจสอบความถูกต้องของ QR Code บนบัตรเลือกตั้ง ค้นหาความสัมพันธ์ระหว่างเล่มที่และเลขที่บัตร">
+
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- QRCode.js Library for Generating -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
@@ -671,7 +688,10 @@
                 try {
                     const bookId = parseInt(bookInputNumeric);
                     if (isNaN(bookId) || bookId < 1) { alert("กรอกหมายเลขเล่มให้ถูกต้อง"); return; }
+                    
+                    // Corrected formula: StartID = (BookID - 1) * 20 + 1
                     const startBallotId = (bookId - 1) * 20 + 1;
+                    
                     const container = document.getElementById('genBookContainer');
                     container.innerHTML = '';
                     const paddedBookId = String(bookId).padStart(7, '0');
@@ -718,6 +738,7 @@
                 } catch (e) { alert("เกิดข้อผิดพลาด"); }
             };
 
+            // === UNIVERSAL SEARCH LOGIC ===
             window.handleUniversalSearch = function() {
                 const input = document.getElementById('universalInput').value.trim().toUpperCase();
                 if (!input) return;
