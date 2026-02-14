@@ -1,0 +1,849 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ECT Ballot QR Decoder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- QRCode.js Library for Generating -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Html5-QRCode Library for Scanning (Fixed Version) -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+    
+    <link href="https://fonts.googleapis.com/css2?family=Anuphan:wght@300;400;500;600&display=swap" rel="stylesheet">
+    <!-- MathJax for rendering formulas -->
+    <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+    <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+    <style>
+        body {
+            font-family: 'Anuphan', sans-serif;
+            transition: background 0.5s ease;
+            min-height: 100vh;
+        }
+        /* Color Themes */
+        .theme-green { background: linear-gradient(135deg, #166534 0%, #064e3b 100%); }
+        .theme-pink { background: linear-gradient(135deg, #be185d 0%, #831843 100%); }
+        .theme-purple { background: linear-gradient(135deg, #7e22ce 0%, #581c87 100%); }
+        .theme-indigo { background: linear-gradient(135deg, #4338ca 0%, #312e81 100%); }
+        
+        .glass-card {
+            background: rgba(255, 255, 255, 0.98);
+            border-radius: 20px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            transition: all 0.3s ease;
+        }
+        
+        .tab-btn {
+            position: relative;
+            color: #6b7280;
+            transition: all 0.3s;
+            font-size: 0.9rem;
+            white-space: nowrap;
+        }
+        .tab-btn.active { font-weight: 600; }
+        .tab-btn.active::after {
+            content: '';
+            position: absolute;
+            bottom: -2px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            height: 3px;
+            border-radius: 3px;
+            background-color: currentColor; 
+        }
+
+        /* Mode Switcher Styles */
+        .mode-btn {
+            opacity: 0.6;
+            transform: scale(0.95);
+            transition: all 0.3s ease;
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+        .mode-btn.active {
+            opacity: 1;
+            transform: scale(1);
+            background: rgba(255,255,255,0.15);
+            border-color: rgba(255,255,255,0.5);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+        }
+        
+        .text-theme-green { color: #15803d; }
+        .text-theme-pink { color: #be185d; }
+        .text-theme-blue { color: #1d4ed8; }
+        .text-theme-orange { color: #c2410c; }
+        .text-theme-purple { color: #7e22ce; }
+        .text-theme-indigo { color: #4338ca; }
+
+        #qrcode img, #qrcode canvas {
+            margin: 0 auto;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+        }
+        .mini-qr canvas, .mini-qr img {
+            width: 80px !important;
+            height: 80px !important;
+            padding: 4px !important;
+            border-radius: 4px !important;
+        }
+        
+        .animate-fade-in { animation: fadeIn 0.4s ease-out forwards; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+        .info-btn { @apply w-6 h-6 rounded-full border flex items-center justify-center text-xs cursor-pointer transition-colors; }
+        .modal-overlay { background-color: rgba(0, 0, 0, 0.85); backdrop-filter: blur(5px); }
+    </style>
+</head>
+<body class="theme-indigo flex flex-col items-center justify-center min-h-screen p-4 text-gray-800">
+
+    <div id="reader-file" style="display:none;"></div>
+
+    <!-- Header -->
+    <div class="text-center mb-6 text-white w-full max-w-md">
+        <h1 class="text-2xl font-bold mb-1">ECT Ballot Decoder</h1>
+        <p class="text-sm opacity-80 font-light mb-6">เครื่องมือตรวจสอบความสัมพันธ์บัตรเลือกตั้ง</p>
+        
+        <!-- MAIN MODE SWITCHER -->
+        <div class="grid grid-cols-2 gap-2 justify-center mb-2 px-2 max-w-sm mx-auto">
+            <!-- Universal Button (Default Active) -->
+            <button onclick="window.switchMode('universal')" id="mode-universal" class="mode-btn active py-2 px-2 rounded-xl bg-indigo-900/30 text-white flex items-center justify-center gap-2 backdrop-blur-md">
+                <span class="w-2 h-2 rounded-full bg-indigo-400 shadow-[0_0_10px_#818cf8]"></span>
+                <span class="text-xs font-semibold">ค้นหารวม</span>
+            </button>
+            <button onclick="window.switchMode('green')" id="mode-green" class="mode-btn py-2 px-2 rounded-xl bg-green-900/30 text-white flex items-center justify-center gap-2 backdrop-blur-md">
+                <span class="w-2 h-2 rounded-full bg-green-400 shadow-[0_0_10px_#4ade80]"></span>
+                <span class="text-xs font-semibold">ส.ส. แบ่งเขต</span>
+            </button>
+            <button onclick="window.switchMode('pink')" id="mode-pink" class="mode-btn py-2 px-2 rounded-xl bg-pink-900/30 text-white flex items-center justify-center gap-2 backdrop-blur-md">
+                <span class="w-2 h-2 rounded-full bg-pink-400 shadow-[0_0_10px_#f472b6]"></span>
+                <span class="text-xs font-semibold">บัญชีรายชื่อ</span>
+            </button>
+            <button onclick="window.switchMode('genbook')" id="mode-genbook" class="mode-btn py-2 px-2 rounded-xl bg-purple-900/30 text-white flex items-center justify-center gap-2 backdrop-blur-md">
+                <span class="w-2 h-2 rounded-full bg-purple-400 shadow-[0_0_10px_#c084fc]"></span>
+                <span class="text-xs font-semibold">สร้างยกเล่ม</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Main Card -->
+    <div class="w-full max-w-md glass-card overflow-hidden relative">
+        
+        <!-- GREEN MODE TABS (Hidden by default) -->
+        <div id="green-tabs" class="flex border-b border-gray-100 overflow-x-auto overflow-y-hidden no-scrollbar hidden">
+            <button onclick="window.switchTab('encode')" id="tab-encode" class="flex-1 py-4 text-center tab-btn active text-theme-green min-w-[90px]">สร้างรหัส</button>
+            <button onclick="window.switchTab('decode')" id="tab-decode" class="flex-1 py-4 text-center tab-btn min-w-[90px]">ถอดรหัส</button>
+            <button onclick="window.switchTab('verify')" id="tab-verify" class="flex-1 py-4 text-center tab-btn min-w-[90px]">ตรวจสอบ</button>
+        </div>
+
+        <!-- Content Area -->
+        <div class="p-6">
+            
+            <!-- === UNIVERSAL SEARCH MODE (Default Visible) === -->
+            <div id="universal-content-wrapper">
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                            ค้นหาข้อมูลทั้งหมด (Universal Search)
+                        </label>
+                        <div class="relative flex items-center">
+                            <input type="text" id="universalInput" 
+                                class="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:border-transparent outline-none transition font-mono text-lg"
+                                placeholder="กรอกเล่มที่, เลขที่บัตร, หรือ QR Code">
+                            <button onclick="window.handleUniversalSearch()" class="absolute right-2 bg-indigo-600 hover:bg-indigo-700 text-white p-2 rounded-lg shadow-md active:scale-95 transition-all">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
+                            </button>
+                        </div>
+                        <p class="text-[10px] text-gray-400 mt-1 pl-1">ตัวอย่าง: W2231 (QR), 20516201 (บัตร), หรือ 1025811 (เล่ม)</p>
+                    </div>
+
+                    <div id="universalResult" class="hidden mt-6 animate-fade-in">
+                        <div class="bg-white border border-indigo-100 rounded-xl shadow-lg overflow-hidden">
+                            <div class="bg-indigo-50 p-3 border-b border-indigo-100 flex justify-between items-center">
+                                <span class="text-xs font-bold text-indigo-700 uppercase tracking-widest">ผลการค้นหา</span>
+                                <span id="uniResultType" class="text-[10px] bg-white text-indigo-600 px-2 py-0.5 rounded-full border border-indigo-100 shadow-sm">---</span>
+                            </div>
+                            
+                            <!-- SINGLE VIEW (Ballot/QR) -->
+                            <div id="uniSingleView" class="p-6 space-y-6">
+                                <!-- Book Info -->
+                                <div class="flex items-center justify-between">
+                                    <div>
+                                        <p class="text-[10px] text-gray-400 uppercase font-bold tracking-wide">เล่มที่ (Book ID)</p>
+                                        <p id="uniBookId" class="text-2xl font-mono font-bold text-gray-800">---</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-[10px] text-gray-400 uppercase font-bold tracking-wide">เลขที่บัตร (Ballot ID)</p>
+                                        <p id="uniBallotId" class="text-xl font-mono font-bold text-gray-800">---</p>
+                                    </div>
+                                </div>
+
+                                <!-- QR Code -->
+                                <div class="flex flex-col items-center justify-center pt-4 border-t border-dashed border-gray-200">
+                                    <div id="uniQrcode" class="mb-2"></div>
+                                    <p id="uniQrText" class="text-lg font-mono font-bold text-indigo-600">---</p>
+                                    <p class="text-[10px] text-gray-400 uppercase tracking-widest mt-1">QR Code Value</p>
+                                </div>
+                            </div>
+
+                            <!-- LIST VIEW (Book) -->
+                            <div id="uniListView" class="hidden p-6">
+                                <div class="mb-4 pb-2 border-b border-indigo-50 flex items-center justify-between">
+                                    <div>
+                                        <p class="text-[10px] text-gray-400 uppercase font-bold tracking-wide">เล่มที่ (Book ID)</p>
+                                        <p id="uniBookIdList" class="text-2xl font-mono font-bold text-gray-800 text-indigo-700">---</p>
+                                    </div>
+                                    <div class="text-right">
+                                        <p class="text-[10px] text-gray-400 uppercase font-bold tracking-wide">ช่วงเลขที่บัตร (Ballot Range)</p>
+                                        <p id="uniBallotIdList" class="text-lg font-mono font-bold text-gray-800">---</p>
+                                    </div>
+                                </div>
+                                <div id="uniListContainer" class="grid grid-cols-2 gap-3 max-h-[400px] overflow-y-auto no-scrollbar pr-1">
+                                    <!-- Items injected here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- === GREEN MODE CONTENT === -->
+            <div id="green-content-wrapper" class="hidden">
+                <!-- ENCODE MODE -->
+                <div id="section-encode">
+                    <div class="flex justify-end mb-2">
+                        <button onclick="window.openInfo('encode')" class="text-gray-400 hover:text-green-600 transition-colors flex items-center gap-1 text-[10px] border border-gray-200 rounded-full px-2 py-0.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> หลักการทำงาน
+                        </button>
+                    </div>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">เลขที่บัตร (ต้นขั้ว)</label>
+                            <div class="relative flex items-center">
+                                <span class="absolute left-4 text-green-700 font-bold text-lg">B</span>
+                                <input type="number" id="idInput" class="w-full pl-10 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none transition font-mono text-lg" placeholder="20516201">
+                            </div>
+                        </div>
+                        <button onclick="window.handleEncode()" class="w-full bg-green-600 hover:bg-green-700 text-white font-semibold py-3.5 rounded-xl shadow-lg shadow-green-600/30 active:scale-95 transition-all flex items-center justify-center gap-2">สร้าง QR Code</button>
+                        <div id="encodeResult" class="hidden mt-6 pt-6 border-t border-dashed border-gray-200 text-center animate-fade-in">
+                            <div class="bg-green-50 rounded-xl p-6 border border-green-100">
+                                <span class="text-xs font-bold text-green-600 uppercase tracking-widest">QR Code Value</span>
+                                <div id="qrText" class="text-4xl font-mono font-bold text-gray-800 my-2 tracking-wide">---</div>
+                                <div class="text-xs text-gray-400 mb-4 font-mono">ID: <span id="idDisplay">---</span></div>
+                                <div id="qrcode" class="flex justify-center mix-blend-multiply mb-4"></div>
+                                <div class="pt-4 border-t border-green-200/60 text-left space-y-2">
+                                    <div class="flex justify-between items-center text-sm">
+                                        <span class="text-green-700 font-medium">เล่มที่ (Book):</span>
+                                        <span id="encodeBookId" class="font-mono font-bold text-green-900 text-lg">---</span>
+                                    </div>
+                                    <div class="flex justify-between items-center text-sm">
+                                        <span class="text-green-700 font-medium">ลำดับที่ (Seq):</span>
+                                        <span id="encodeSeqId" class="font-mono font-bold text-green-900 text-lg">---</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- DECODE MODE -->
+                <div id="section-decode" class="hidden">
+                    <div class="flex justify-end mb-2">
+                        <button onclick="window.openInfo('decode')" class="text-gray-400 hover:text-blue-600 transition-colors flex items-center gap-1 text-[10px] border border-gray-200 rounded-full px-2 py-0.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> หลักการทำงาน
+                        </button>
+                    </div>
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">รหัสจาก QR Code (5 หลัก)</label>
+                            <div class="relative flex items-center">
+                                <input type="text" id="qrInput" class="w-full pl-4 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition font-mono text-lg uppercase tracking-widest" placeholder="W2231">
+                                <button onclick="document.getElementById('qrFileInput').click()" class="absolute right-2 p-1.5 text-gray-400 hover:text-blue-600 bg-white border border-gray-200 rounded-lg shadow-sm transition-all hover:shadow-md active:scale-95" title="อัปโหลดรูปภาพ">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                </button>
+                                <input type="file" id="qrFileInput" class="hidden" accept="image/*" onchange="window.handleFileScan(this, 'qr')">
+                            </div>
+                        </div>
+                        <button onclick="window.handleDecode()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3.5 rounded-xl shadow-lg shadow-blue-600/30 active:scale-95 transition-all flex items-center justify-center gap-2">ตรวจสอบ ID ต้นขั้ว</button>
+                        <div id="decodeResult" class="hidden mt-6 pt-6 border-t border-dashed border-gray-200 text-center animate-fade-in">
+                            <div class="bg-blue-50 rounded-xl p-6 border border-blue-100">
+                                <span class="text-xs font-bold text-blue-600 uppercase tracking-widest">Original Ballot ID</span>
+                                <div id="decodedId" class="text-3xl font-mono font-bold text-gray-800 mt-2 tracking-wider">---</div>
+                                <div class="text-sm text-blue-500 mt-1 font-mono font-medium mb-3">Full ID: <span id="decodedIdFull">---</span></div>
+                                <div class="pt-3 border-t border-blue-200/50">
+                                    <p class="text-[10px] text-blue-400 uppercase font-bold tracking-widest mb-1">ข้อมูลเล่มที่ (Calculated Book ID)</p>
+                                    <div class="text-xl font-bold text-blue-800">เล่มที่ <span id="decodedBookId" class="font-mono text-2xl">---</span></div>
+                                    <p class="text-[10px] text-blue-400 mt-1">(คำนวณจากเลขที่บัตร / 20)</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- VERIFY MODE -->
+                <div id="section-verify" class="hidden">
+                     <div class="flex justify-end mb-2">
+                        <button onclick="window.openInfo('verify')" class="text-gray-400 hover:text-orange-600 transition-colors flex items-center gap-1 text-[10px] border border-gray-200 rounded-full px-2 py-0.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> หลักการทำงาน
+                        </button>
+                    </div>
+                    <div class="space-y-4">
+                        <div class="p-4 bg-orange-50 border border-orange-100 rounded-xl text-xs text-orange-700 mb-4">
+                            <div class="flex gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                <span>กรอกข้อมูลทั้ง 2 ช่องเพื่อตรวจสอบว่าข้อมูลตรงกันหรือไม่ (Match Check)</span>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">เลขที่บัตร</label>
+                            <div class="relative flex items-center">
+                                <span class="absolute left-4 text-gray-500 font-bold text-sm">B</span>
+                                <input type="number" id="verifyIdInput" placeholder="20516201" class="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none font-mono">
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">รหัส QR Code</label>
+                            <input type="text" id="verifyQrInput" placeholder="W2231" class="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none font-mono uppercase">
+                        </div>
+                        <button onclick="window.handleVerify()" class="w-full bg-orange-600 hover:bg-orange-700 text-white font-semibold py-3.5 rounded-xl shadow-lg shadow-orange-600/30 active:scale-95 transition-all flex items-center justify-center gap-2 mt-2">ตรวจสอบ (Verify)</button>
+                        <div id="verifyResult" class="hidden mt-6 animate-fade-in">
+                            <div id="verifyBg" class="bg-gray-100 rounded-xl p-6 border border-gray-200 flex flex-col items-center text-center">
+                                <div id="verifyIcon" class="mb-2"></div>
+                                <div id="verifyText" class="text-lg font-bold">Checking...</div>
+                                <div id="verifyDetail" class="text-xs text-gray-500 mt-1"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- === PINK MODE CONTENT === -->
+            <div id="pink-content-wrapper" class="hidden">
+                 <div class="flex justify-end mb-2">
+                        <button onclick="window.openInfo('book')" class="text-gray-400 hover:text-pink-600 transition-colors flex items-center gap-1 text-[10px] border border-gray-200 rounded-full px-2 py-0.5">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> หลักการทำงาน
+                        </button>
+                    </div>
+                 <div class="p-4 bg-pink-50 border border-pink-100 rounded-xl text-xs text-pink-700 mb-4 animate-fade-in">
+                    <div class="flex gap-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+                        <span>พิสูจน์ความสัมพันธ์: เล่มที่ (Book ID) คำนวณจาก เลขที่ (Ballot ID)</span>
+                    </div>
+                </div>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">เลขที่บัตร (Barcode 8 หลัก)</label>
+                        <div class="relative flex items-center">
+                            <span class="absolute left-4 text-pink-600 font-bold text-lg">?</span>
+                            <input type="text" id="bookInput" class="w-full pl-10 pr-12 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-pink-500 focus:border-transparent outline-none transition font-mono text-lg" placeholder="B20516201">
+                            <button onclick="document.getElementById('bookFileInput').click()" class="absolute right-2 p-1.5 text-gray-400 hover:text-pink-600 bg-white border border-gray-200 rounded-lg shadow-sm transition-all hover:shadow-md active:scale-95" title="อัปโหลดรูปภาพ">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                            </button>
+                            <input type="file" id="bookFileInput" class="hidden" accept="image/*" onchange="window.handleFileScan(this, 'barcode')">
+                        </div>
+                        <p class="text-[10px] text-gray-400 mt-1 pl-1">กรอก Barcode เต็ม (รวมตัวอักษรหน้าถ้ามี)</p>
+                    </div>
+                    <button onclick="window.handleBookSearch()" class="w-full bg-pink-600 hover:bg-pink-700 text-white font-semibold py-3.5 rounded-xl shadow-lg shadow-pink-600/30 active:scale-95 transition-all flex items-center justify-center gap-2">ค้นหาเล่มที่</button>
+                    <div id="bookResult" class="hidden mt-6 animate-fade-in">
+                        <div class="bg-pink-50 rounded-xl p-6 border border-pink-100 text-center">
+                            <span class="text-xs font-bold text-pink-600 uppercase tracking-widest">Election Book ID</span>
+                            <div id="bookIdDisplay" class="text-3xl font-mono font-bold text-gray-800 mt-2 tracking-wider">---</div>
+                            <div class="text-xs text-gray-400 mt-4 pt-4 border-t border-pink-100">สูตรคำนวณ: M = ⌊N/20⌋ + 1<br>(ทุกๆ 20 บัตร จะขึ้นเล่มใหม่ 1 เล่ม)</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- === GEN BOOK MODE CONTENT === -->
+            <div id="genbook-content-wrapper" class="hidden">
+                <div class="flex justify-end mb-2">
+                    <button onclick="window.openInfo('genbook')" class="text-gray-400 hover:text-purple-600 transition-colors flex items-center gap-1 text-[10px] border border-gray-200 rounded-full px-2 py-0.5">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg> หลักการทำงาน
+                    </button>
+                </div>
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">ระบุหมายเลขเล่ม (Book ID)</label>
+                        <div class="relative flex items-center">
+                            <div class="absolute left-3 top-1/2 -translate-y-1/2 flex items-center z-10">
+                                <select id="genBookPrefix" class="bg-purple-50 text-purple-700 font-bold text-lg border border-purple-200 rounded-lg focus:ring-2 focus:ring-purple-500 outline-none cursor-pointer py-1 pl-2 pr-8 appearance-none transition-colors hover:bg-purple-100">
+                                    <option value="B">B</option>
+                                    <option value="A">A</option>
+                                </select>
+                                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-2 text-purple-700">
+                                    <svg class="fill-current h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20"><path d="M9.293 12.95l.707.707L15.657 8l-1.414-1.414L10 10.828 5.757 6.586 4.343 8z"/></svg>
+                                </div>
+                            </div>
+                            <input type="text" id="genBookInput" class="w-full pl-24 pr-4 py-3 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-purple-500 focus:border-transparent outline-none transition font-mono text-lg" placeholder="1025811">
+                        </div>
+                        <p class="text-[10px] text-gray-400 mt-1 pl-1">พิมพ์ตัวเลข เช่น 1025811</p>
+                    </div>
+                    <button onclick="window.handleGenBook()" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-semibold py-3.5 rounded-xl shadow-lg shadow-purple-600/30 active:scale-95 transition-all flex items-center justify-center gap-2">สร้างยกเล่ม (20 ใบ)</button>
+                    <div id="genBookResult" class="hidden mt-6 pt-4 border-t border-dashed border-gray-200 animate-fade-in">
+                        <div class="flex justify-between items-center mb-4">
+                            <h3 class="text-sm font-bold text-gray-700">รายการบัตรในเล่ม (1-20)</h3>
+                            <span id="genBookLabel" class="text-xs font-mono bg-purple-100 text-purple-700 px-2 py-1 rounded">Book: ---</span>
+                        </div>
+                        <div id="genBookContainer" class="grid grid-cols-2 gap-3 max-h-[400px] overflow-y-auto no-scrollbar pr-1"></div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="mt-8 text-center space-y-4 px-4 pb-12">
+        <div class="bg-black/20 rounded-xl p-4 max-w-lg mx-auto text-white/70 text-xs leading-relaxed text-left border border-white/10 backdrop-blur-sm shadow-sm">
+            <strong class="text-yellow-400 block mb-2 text-sm flex items-center gap-2">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" /></svg> Disclaimer
+            </strong>
+            <p class="mb-2">เครื่องมือนี้จัดทำขึ้นเพื่อการศึกษาวิธีการ encode/decode ของ QR Code บนบัตรเลือกตั้งเท่านั้น มีวัตถุประสงค์เพื่อตรวจสอบว่าบัตรเลือกตั้งกับต้นขั้วตรงกันหรือไม่ <strong>ไม่ได้มีเจตนาใช้ในทางที่ผิดกฎหมายหรือทุจริตการเลือกตั้งแต่อย่างใด</strong></p>
+            <p class="opacity-80">ผลลัพธ์อาจไม่ถูกต้อง 100% เนื่องจาก sampling ข้อมูลบัตรจริงมีจำนวนน้อย ค่า K table ที่ใช้ถอดรหัสยังไม่ครบทุกกรณี หาก QR Code ของท่านไม่สามารถถอดรหัสได้ อาจเป็นเพราะยังไม่มีข้อมูล K สำหรับรหัสดังกล่าว</p>
+        </div>
+        <p class="text-white/60 text-xs font-mono tracking-wider pt-2">ECT Ballot Decoder · v1.0-beta</p>
+    </div>
+
+    <!-- Info Modal -->
+    <div id="infoModal" class="fixed inset-0 z-50 hidden flex items-center justify-center modal-overlay opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-2xl p-6 max-w-sm w-full mx-4 shadow-2xl transform scale-95 transition-transform duration-300">
+            <div class="flex justify-between items-center mb-4">
+                <h3 id="modalTitle" class="text-lg font-bold text-gray-800 flex items-center gap-2"></h3>
+                <button onclick="window.closeInfo()" class="text-gray-400 hover:text-gray-600"><svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></button>
+            </div>
+            <div id="modalContent" class="text-sm text-gray-600 space-y-3 leading-relaxed"></div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            // --- CONSTANTS ---
+            const M = 60466176n; 
+            const A = 35477987n;
+            const C = 46913010n;
+
+            // --- MATH HELPERS ---
+            function modInverse(a, m) {
+                let m0 = m;
+                let x0 = 0n;
+                let x1 = 1n;
+                if (m === 1n) return 0n;
+                while (a > 1n) {
+                    let q = a / m;
+                    let t = m;
+                    m = a % m;
+                    a = t;
+                    t = x0;
+                    x0 = x1 - q * x0;
+                    x1 = t;
+                }
+                if (x1 < 0n) x1 += m0;
+                return x1;
+            }
+
+            const A_INV = modInverse(A, M);
+
+            // --- INFO MODAL DATA ---
+            const modalData = {
+                // ... (Previous data) ...
+                'encode': { title: 'หลักการ Encode', iconColor: 'text-green-600', content: `<p>สูตร: $$Result = (ID \\times A + C) \\pmod M$$</p>` },
+                'decode': { title: 'หลักการ Decode', iconColor: 'text-blue-600', content: `<p>สูตร: $$ID = (QR_{val} - C) \\times A^{-1} \\pmod M$$</p>` },
+                'verify': { title: 'หลักการ Verify', iconColor: 'text-orange-600', content: `<p>ตรวจสอบข้อมูลสองทาง (Two-way Check)</p>` },
+                'book': { title: 'ความสัมพันธ์ เล่มที่', iconColor: 'text-pink-600', content: `<p>$$BookID = \\lfloor \\frac{BallotID}{20} \\rfloor + 1$$</p>` },
+                'genbook': { title: 'สร้างรหัสยกเล่ม', iconColor: 'text-purple-600', content: `<p>$$StartID = (BookID - 1) \\times 20 + 1$$</p>` }
+            };
+
+            // --- GLOBAL FUNCTIONS ---
+            
+            // File Upload Handler (Restored)
+            window.handleFileScan = function(input, type) {
+                if (input.files.length === 0) return;
+                
+                // Note: currentScanType is not globally defined in this scope, but needed for onScanSuccess.
+                // We'll define a temporary one or pass it. For simplicity, we can reuse logic.
+                // However, without the global `currentScanType`, we need to adapt.
+                // Let's attach type to window temporarily or handle logic here.
+                
+                const file = input.files[0];
+                const html5QrCodeFile = new Html5Qrcode("reader-file");
+                
+                html5QrCodeFile.scanFile(file, true)
+                    .then(decodedText => {
+                        // Directly handle success based on type
+                        if (type === 'qr') {
+                            document.getElementById('qrInput').value = decodedText;
+                            window.handleDecode(); 
+                        } else if (type === 'barcode') {
+                            document.getElementById('bookInput').value = decodedText;
+                            window.handleBookSearch(); 
+                        }
+                        input.value = '';
+                    })
+                    .catch(err => {
+                        const errorStr = (err || "").toString();
+                        if (!errorStr.includes("No MultiFormat Readers")) {
+                             console.error("File scan error", err);
+                        }
+                        alert("ไม่พบรหัสในรูปภาพ\nกรุณาใช้รูปที่มี QR Code หรือ Barcode ที่ชัดเจน");
+                        input.value = '';
+                    });
+            };
+
+            // Full Implementation of Functions
+            window.openInfo = function(key) {
+                const data = modalData[key];
+                const modal = document.getElementById('infoModal');
+                const title = document.getElementById('modalTitle');
+                const content = document.getElementById('modalContent');
+                
+                title.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 ${data.iconColor}" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    <span>${data.title}</span>
+                `;
+                content.innerHTML = data.content;
+                modal.classList.remove('hidden');
+                setTimeout(() => {
+                    modal.classList.remove('opacity-0');
+                    modal.children[0].classList.remove('scale-95');
+                    modal.children[0].classList.add('scale-100');
+                    if (window.MathJax) MathJax.typesetPromise([content]);
+                }, 10);
+            };
+
+            window.closeInfo = function() {
+                const modal = document.getElementById('infoModal');
+                modal.classList.add('opacity-0');
+                modal.children[0].classList.remove('scale-100');
+                modal.children[0].classList.add('scale-95');
+                setTimeout(() => { modal.classList.add('hidden'); }, 300);
+            };
+            
+            document.getElementById('infoModal').addEventListener('click', function(e) {
+                if (e.target === this) window.closeInfo();
+            });
+
+            window.switchMode = function(mode) {
+                const body = document.body;
+                
+                // 1. Define all buttons
+                const buttons = {
+                    'green': document.getElementById('mode-green'),
+                    'pink': document.getElementById('mode-pink'),
+                    'genbook': document.getElementById('mode-genbook'),
+                    'universal': document.getElementById('mode-universal')
+                };
+                
+                // 2. Define all content wrappers
+                const wrappers = {
+                    'green': document.getElementById('green-content-wrapper'),
+                    'pink': document.getElementById('pink-content-wrapper'),
+                    'genbook': document.getElementById('genbook-content-wrapper'),
+                    'universal': document.getElementById('universal-content-wrapper')
+                };
+                
+                const greenTabs = document.getElementById('green-tabs');
+
+                // 3. Reset ALL
+                Object.values(buttons).forEach(b => b && b.classList.remove('active'));
+                Object.values(wrappers).forEach(w => w && w.classList.add('hidden'));
+                if (greenTabs) greenTabs.classList.add('hidden');
+
+                // 4. Activate Selected
+                if (buttons[mode]) buttons[mode].classList.add('active');
+                if (wrappers[mode]) wrappers[mode].classList.remove('hidden');
+
+                // 5. Apply Theme & Specific Logic
+                if (mode === 'green') {
+                    body.className = 'theme-green flex flex-col items-center justify-center min-h-screen p-4 text-gray-800';
+                    if (greenTabs) greenTabs.classList.remove('hidden');
+                } else if (mode === 'pink') {
+                    body.className = 'theme-pink flex flex-col items-center justify-center min-h-screen p-4 text-gray-800';
+                } else if (mode === 'genbook') {
+                    body.className = 'theme-purple flex flex-col items-center justify-center min-h-screen p-4 text-gray-800';
+                } else if (mode === 'universal') {
+                    body.className = 'theme-indigo flex flex-col items-center justify-center min-h-screen p-4 text-gray-800';
+                }
+            };
+
+            window.switchTab = function(mode) {
+                const tabs = ['encode', 'decode', 'verify'];
+                tabs.forEach(t => {
+                    const section = document.getElementById('section-' + t);
+                    const btn = document.getElementById('tab-' + t);
+                    if (section && btn) {
+                        if (t === mode) {
+                            section.classList.remove('hidden');
+                            btn.classList.add('active');
+                            if (mode === 'verify') btn.className = 'flex-1 py-4 text-center tab-btn active text-theme-orange min-w-[90px]';
+                            else if (mode === 'decode') btn.className = 'flex-1 py-4 text-center tab-btn active text-theme-blue min-w-[90px]';
+                            else btn.className = 'flex-1 py-4 text-center tab-btn active text-theme-green min-w-[90px]';
+                        } else {
+                            section.classList.add('hidden');
+                            btn.classList.remove('active');
+                            btn.className = 'flex-1 py-4 text-center tab-btn min-w-[90px]';
+                        }
+                    }
+                });
+            };
+
+            // Existing Logic Handlers (Restored)
+            window.handleEncode = function() {
+                const input = document.getElementById('idInput').value;
+                if (!input) return;
+                try {
+                    const id = BigInt(input);
+                    const result = (id * A + C) % M;
+                    const base36 = result.toString(36).toUpperCase();
+                    document.getElementById('qrText').innerText = base36;
+                    document.getElementById('idDisplay').innerText = 'B' + input;
+                    document.getElementById('encodeResult').classList.remove('hidden');
+                    const qrContainer = document.getElementById('qrcode');
+                    qrContainer.innerHTML = '';
+                    new QRCode(qrContainer, { text: base36, width: 128, height: 128, colorDark : "#166534", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.L });
+
+                    const ballotNum = Number(id);
+                    const bookId = Math.floor((ballotNum - 1) / 20) + 1;
+                    const seqInBook = ((ballotNum - 1) % 20) + 1;
+                    const bookIdStr = String(bookId).padStart(7, '0');
+                    document.getElementById('encodeBookId').innerText = 'B' + bookIdStr;
+                    document.getElementById('encodeSeqId').innerText = seqInBook;
+                } catch (e) { alert("กรุณากรอกตัวเลขที่ถูกต้อง"); }
+            };
+
+            window.handleDecode = function() {
+                const input = document.getElementById('qrInput').value.trim().toUpperCase();
+                if (!input) return;
+                try {
+                    const val = BigInt(parseInt(input, 36));
+                    let diff = val - C;
+                    while (diff < 0n) diff += M;
+                    const result = (diff * A_INV) % M;
+                    const resultStr = result.toString().padStart(8, '0');
+                    const ballotNum = Number(result);
+                    const bookId = Math.floor((ballotNum - 1) / 20) + 1;
+                    const bookIdStr = String(bookId).padStart(7, '0');
+                    document.getElementById('decodedId').innerText = resultStr;
+                    document.getElementById('decodedIdFull').innerText = 'B' + resultStr;
+                    document.getElementById('decodedBookId').innerText = 'B' + bookIdStr; 
+                    document.getElementById('decodeResult').classList.remove('hidden');
+                } catch (e) { alert("รหัส QR Code ไม่ถูกต้อง"); }
+            };
+
+            window.handleVerify = function() {
+                const idVal = document.getElementById('verifyIdInput').value;
+                const qrVal = document.getElementById('verifyQrInput').value.trim().toUpperCase();
+                if (!idVal || !qrVal) { alert("กรุณากรอกข้อมูลให้ครบ"); return; }
+                try {
+                    const id = BigInt(idVal);
+                    const expectedBigInt = (id * A + C) % M;
+                    const expectedQr = expectedBigInt.toString(36).toUpperCase();
+                    const resultArea = document.getElementById('verifyResult');
+                    const verifyBg = document.getElementById('verifyBg');
+                    const verifyIcon = document.getElementById('verifyIcon');
+                    const verifyText = document.getElementById('verifyText');
+                    const verifyDetail = document.getElementById('verifyDetail');
+                    resultArea.classList.remove('hidden');
+                    if (expectedQr === qrVal) {
+                        verifyBg.className = "bg-green-50 rounded-xl p-6 border border-green-200 flex flex-col items-center shadow-sm";
+                        verifyIcon.innerHTML = `<div class="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center text-green-600 mb-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg></div>`;
+                        verifyText.innerHTML = `<span class="text-green-700">ข้อมูลถูกต้อง</span>`;
+                        verifyDetail.innerHTML = `QR Code: ${expectedQr} ตรงกับข้อมูล`;
+                    } else {
+                        verifyBg.className = "bg-red-50 rounded-xl p-6 border border-red-200 flex flex-col items-center shadow-sm";
+                        verifyIcon.innerHTML = `<div class="w-12 h-12 rounded-full bg-red-100 flex items-center justify-center text-red-600 mb-2"><svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg></div>`;
+                        verifyText.innerHTML = `<span class="text-red-700">ข้อมูลไม่ตรงกัน</span>`;
+                        verifyDetail.innerHTML = `QR ที่ถูกต้องคือ <span class="font-bold">${expectedQr}</span>`;
+                    }
+                } catch(e) { alert("เกิดข้อผิดพลาด"); }
+            };
+
+            window.handleGenBook = function() {
+                const bookInputStr = document.getElementById('genBookInput').value;
+                const prefix = document.getElementById('genBookPrefix').value;
+                if (!bookInputStr) return;
+                const bookInputNumeric = bookInputStr.replace(/\D/g, '');
+                try {
+                    const bookId = parseInt(bookInputNumeric);
+                    if (isNaN(bookId) || bookId < 1) { alert("กรอกหมายเลขเล่มให้ถูกต้อง"); return; }
+                    const startBallotId = (bookId - 1) * 20 + 1;
+                    const container = document.getElementById('genBookContainer');
+                    container.innerHTML = '';
+                    const paddedBookId = String(bookId).padStart(7, '0');
+                    document.getElementById('genBookLabel').innerText = 'Book: ' + prefix + paddedBookId;
+                    document.getElementById('genBookResult').classList.remove('hidden');
+                    for (let i = 0; i < 20; i++) {
+                        const currentId = BigInt(startBallotId + i);
+                        const seq = i + 1;
+                        const result = (currentId * A + C) % M;
+                        const base36 = result.toString(36).toUpperCase();
+                        const card = document.createElement('div');
+                        card.className = 'bg-white p-3 rounded-lg border border-purple-100 shadow-sm flex flex-col items-center';
+                        const seqLabel = document.createElement('div');
+                        seqLabel.className = 'w-full flex justify-between text-[10px] text-gray-400 font-mono mb-2';
+                        seqLabel.innerHTML = `<span>#${seq}</span><span>ID: ${prefix}${currentId}</span>`;
+                        const qrDiv = document.createElement('div');
+                        qrDiv.className = 'mini-qr mb-2';
+                        new QRCode(qrDiv, { text: base36, width: 80, height: 80, colorDark : "#7e22ce", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.L });
+                        const codeLabel = document.createElement('div');
+                        codeLabel.className = 'text-lg font-bold text-purple-700 font-mono';
+                        codeLabel.innerText = base36;
+                        card.appendChild(seqLabel);
+                        card.appendChild(qrDiv);
+                        card.appendChild(codeLabel);
+                        container.appendChild(card);
+                    }
+                } catch (e) { alert("เกิดข้อผิดพลาด"); }
+            };
+
+            window.handleBookSearch = function() {
+                const input = document.getElementById('bookInput').value.trim();
+                if (!input) return;
+                try {
+                    let prefix = "";
+                    let numberPart = "";
+                    if (isNaN(input[0])) { prefix = input.slice(0, 1); numberPart = input.slice(1); } else { numberPart = input; }
+                    const N = parseInt(numberPart, 10);
+                    if (isNaN(N)) { alert("รูปแบบไม่ถูกต้อง"); return; }
+                    const start = Math.floor((N - 1) / 20) + 1;
+                    const bookIdSuffix = String(start).padStart(7, "0");
+                    const bookId = prefix + bookIdSuffix;
+                    document.getElementById('bookIdDisplay').innerText = bookId;
+                    document.getElementById('bookResult').classList.remove('hidden');
+                } catch (e) { alert("เกิดข้อผิดพลาด"); }
+            };
+
+            window.handleUniversalSearch = function() {
+                const input = document.getElementById('universalInput').value.trim().toUpperCase();
+                if (!input) return;
+
+                const cleanInput = input.replace(/[^A-Z0-9]/g, '');
+                const alphaMatch = cleanInput.match(/^([A-Z]*)([0-9]+)$/);
+                
+                let detectedType = "";
+                let ballotId = 0n;
+                let bookId = 0;
+                let qrValue = "";
+                let prefix = "B"; 
+
+                try {
+                    document.getElementById('universalResult').classList.remove('hidden');
+                    const singleView = document.getElementById('uniSingleView');
+                    const listView = document.getElementById('uniListView');
+
+                    if (cleanInput.length <= 5 && /^[0-9A-Z]+$/.test(cleanInput)) {
+                        detectedType = "QR Code";
+                        const val = BigInt(parseInt(cleanInput, 36));
+                        let diff = val - C;
+                        while (diff < 0n) diff += M;
+                        ballotId = (diff * A_INV) % M;
+                        qrValue = cleanInput;
+                        
+                        singleView.classList.remove('hidden');
+                        listView.classList.add('hidden');
+                        
+                        const ballotNum = Number(ballotId);
+                        bookId = Math.floor((ballotNum - 1) / 20) + 1;
+                        
+                        const bookIdStr = String(bookId).padStart(7, '0');
+                        const ballotIdStr = String(ballotId).padStart(8, '0');
+                        document.getElementById('uniResultType').innerText = detectedType;
+                        document.getElementById('uniBookId').innerText = prefix + bookIdStr;
+                        document.getElementById('uniBallotId').innerText = prefix + ballotIdStr;
+                        document.getElementById('uniQrText').innerText = qrValue;
+                        
+                        const qrContainer = document.getElementById('uniQrcode');
+                        qrContainer.innerHTML = '';
+                        new QRCode(qrContainer, { text: qrValue, width: 150, height: 150, colorDark : "#4338ca", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.L });
+
+                    } else if (alphaMatch) {
+                        if (alphaMatch[1]) prefix = alphaMatch[1];
+                        const numberString = alphaMatch[2];
+                        const numberPart = parseInt(numberString);
+                        
+                        if (numberString.length >= 8 || numberPart > 10000000) {
+                            detectedType = "Ballot ID (เลขที่บัตร)";
+                            ballotId = BigInt(numberPart);
+                            const res = (ballotId * A + C) % M;
+                            qrValue = res.toString(36).toUpperCase();
+                            
+                            singleView.classList.remove('hidden');
+                            listView.classList.add('hidden');
+                            
+                            const ballotNum = Number(ballotId);
+                            bookId = Math.floor((ballotNum - 1) / 20) + 1;
+                            
+                            const bookIdStr = String(bookId).padStart(7, '0');
+                            const ballotIdStr = String(ballotId).padStart(8, '0');
+                            
+                            document.getElementById('uniResultType').innerText = detectedType;
+                            document.getElementById('uniBookId').innerText = prefix + bookIdStr;
+                            document.getElementById('uniBallotId').innerText = prefix + ballotIdStr;
+                            document.getElementById('uniQrText').innerText = qrValue;
+                            
+                            const qrContainer = document.getElementById('uniQrcode');
+                            qrContainer.innerHTML = '';
+                            new QRCode(qrContainer, { text: qrValue, width: 150, height: 150, colorDark : "#4338ca", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.L });
+
+                        } else {
+                            detectedType = "Book ID (เล่มที่)";
+                            bookId = numberPart;
+                            
+                            singleView.classList.add('hidden');
+                            listView.classList.remove('hidden');
+                            
+                            document.getElementById('uniResultType').innerText = detectedType;
+                            const bookIdStr = String(bookId).padStart(7, '0');
+                            document.getElementById('uniBookIdList').innerText = prefix + bookIdStr;
+                            
+                            const startBallotId = BigInt((bookId - 1) * 20 + 1);
+                            const endBallotId = startBallotId + 19n;
+                            const startStr = String(startBallotId).padStart(8, '0');
+                            const endStr = String(endBallotId).padStart(8, '0');
+                            document.getElementById('uniBallotIdList').innerText = `${prefix}${startStr} - ${prefix}${endStr}`;
+                            
+                            const container = document.getElementById('uniListContainer');
+                            container.innerHTML = '';
+                            
+                            for (let i = 0; i < 20; i++) {
+                                const currentId = startBallotId + BigInt(i);
+                                const seq = i + 1;
+                                const res = (currentId * A + C) % M;
+                                const base36 = res.toString(36).toUpperCase();
+                                
+                                const card = document.createElement('div');
+                                card.className = 'bg-white p-3 rounded-lg border border-indigo-100 shadow-sm flex flex-col items-center';
+                                const seqLabel = document.createElement('div');
+                                seqLabel.className = 'w-full flex justify-between text-[10px] text-gray-400 font-mono mb-2';
+                                seqLabel.innerHTML = `<span>#${seq}</span><span>ID: ${prefix}${currentId}</span>`;
+                                const qrDiv = document.createElement('div');
+                                qrDiv.className = 'mini-qr mb-2';
+                                new QRCode(qrDiv, { text: base36, width: 80, height: 80, colorDark : "#4338ca", colorLight : "#ffffff", correctLevel : QRCode.CorrectLevel.L });
+                                const codeLabel = document.createElement('div');
+                                codeLabel.className = 'text-lg font-bold text-indigo-700 font-mono';
+                                codeLabel.innerText = base36;
+                                card.appendChild(seqLabel);
+                                card.appendChild(qrDiv);
+                                card.appendChild(codeLabel);
+                                container.appendChild(card);
+                            }
+                        }
+                    } else {
+                        alert("รูปแบบข้อมูลไม่ถูกต้อง");
+                        document.getElementById('universalResult').classList.add('hidden');
+                    }
+                } catch (e) {
+                    console.error(e);
+                    alert("ไม่สามารถประมวลผลข้อมูลได้");
+                }
+            };
+
+        })();
+    </script>
+</body>
+</html>
