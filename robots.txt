@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# บอกตำแหน่ง Sitemap ให้ Google รู้
+Sitemap: https://narongchai1997.github.io/ECT-Ballot-Decoder/sitemap.xml
